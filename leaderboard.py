@@ -14,6 +14,7 @@ client = WebClient(token=os.getenv("SLACK_BOT_TOKEN"))
 PAYMENTS_CHANNEL_ID = "C0AU0B20FGT"
 DAILY_CHANNEL_ID = "C0A2R6H3M0C"
 NET_MARGIN = 0.115
+LEADERBOARD_CHANNEL_ID = "C0BFSCRDMT7"
 
 HUBSPOT_OWNER_MAP = {
     "1343632400": "Chloe Vine",
@@ -334,7 +335,10 @@ call_summary = fetch_hubspot_call_summary()
 
 all_ptas = sorted(set(list(sales.keys()) + list(hours_summary.keys()) + list(call_summary.keys())))
 
-print("\nPLANIT LEADERBOARD - MONTH TO DATE\n")
+leaderboard_lines = []
+
+leaderboard_lines.append("*🏆 PLANIT LEADERBOARD - MONTH TO DATE*")
+leaderboard_lines.append("")
 
 for pta in all_ptas:
     nzd_sales = sales[pta].get("NZD", 0)
@@ -351,21 +355,25 @@ for pta in all_ptas:
     nzd_sales_per_hour = nzd_sales / hours if hours else 0
     aud_sales_per_hour = aud_sales / hours if hours else 0
 
-    net_per_hour_nzd = estimated_net_nzd / hours if hours else 0
-    net_per_hour_aud = estimated_net_aud / hours if hours else 0
+    net_nzd_per_hour = estimated_net_nzd / hours if hours else 0
+    net_aud_per_hour = estimated_net_aud / hours if hours else 0
 
-    print(
-        f"{pta} | "
-        f"NZD ${nzd_sales:,.2f} | "
-        f"AUD ${aud_sales:,.2f} | "
-        f"Net NZD ${estimated_net_nzd:,.2f} | "
-        f"Net AUD ${estimated_net_aud:,.2f} | "
-        f"Customers {customer_count} | "
-        f"Hours {hours:.2f} | "
-        f"Calls {calls} | "
-        f"Avg call {avg_call_seconds:.1f}s | "
-        f"NZD/hr ${nzd_sales_per_hour:,.2f} | "
-        f"AUD/hr ${aud_sales_per_hour:,.2f} | "
-        f"Net NZD/hr ${net_per_hour_nzd:,.2f} | "
-        f"Net AUD/hr ${net_per_hour_aud:,.2f}"
+    leaderboard_lines.append(
+        f"*{pta}*\n"
+        f"• NZD ${nzd_sales:,.2f} | AUD ${aud_sales:,.2f}\n"
+        f"• Net NZD ${estimated_net_nzd:,.2f} | Net AUD ${estimated_net_aud:,.2f}\n"
+        f"• Customers: {customer_count}\n"
+        f"• Hours: {hours:.2f}\n"
+        f"• Calls: {calls} (Avg {avg_call_seconds:.1f}s)\n"
+        f"• NZD/hr ${nzd_sales_per_hour:,.2f} | AUD/hr ${aud_sales_per_hour:,.2f}\n"
+        f"• Net/hr NZD ${net_nzd_per_hour:,.2f} | AUD ${net_aud_per_hour:,.2f}"
     )
+
+message = "\n\n".join(leaderboard_lines)
+
+client.chat_postMessage(
+    channel=LEADERBOARD_CHANNEL_ID,
+    text=message,
+)
+
+print("Leaderboard posted to Slack.")
