@@ -15,6 +15,7 @@ client = WebClient(token=os.getenv("SLACK_BOT_TOKEN"))
 PAYMENTS_CHANNEL_ID = "C0AU0B20FGT"
 DAILY_CHANNEL_ID = "C0A2R6H3M0C"
 NET_MARGIN = 0.115
+AUD_TO_NZD = 1.21427
 LEADERBOARD_CHANNEL_ID = "C0BFSCRDMT7"
 
 HUBSPOT_OWNER_MAP = {
@@ -387,28 +388,22 @@ for pta in all_ptas:
 
     estimated_net_nzd = nzd_sales * NET_MARGIN
     estimated_net_aud = aud_sales * NET_MARGIN
-
-    net_nzd_per_hour = estimated_net_nzd / hours if hours else 0
-    net_aud_per_hour = estimated_net_aud / hours if hours else 0
+    estimated_net_total_nzd = estimated_net_nzd + (estimated_net_aud * AUD_TO_NZD)
+    net_per_hour_nzd = estimated_net_total_nzd / hours if hours else 0
 
     ranked_ptas.append({
         "pta": pta,
         "nzd_sales": nzd_sales,
         "aud_sales": aud_sales,
-        "estimated_net_nzd": estimated_net_nzd,
-        "estimated_net_aud": estimated_net_aud,
+        "estimated_net_total_nzd": estimated_net_total_nzd,
         "hours": hours,
         "calls": calls,
         "avg_call_seconds": avg_call_seconds,
         "customers": customer_count,
-        "net_nzd_per_hour": net_nzd_per_hour,
-        "net_aud_per_hour": net_aud_per_hour,
+        "net_per_hour_nzd": net_per_hour_nzd,
     })
 
-ranked_ptas.sort(
-    key=lambda row: row["net_nzd_per_hour"] + row["net_aud_per_hour"],
-    reverse=True,
-)
+ranked_ptas.sort(key=lambda row: row["net_per_hour_nzd"], reverse=True)
 
 table_rows = []
 
@@ -416,9 +411,10 @@ for index, row in enumerate(ranked_ptas, start=1):
     table_rows.append([
         index,
         row["pta"],
-        f"${row['net_nzd_per_hour']:,.2f}",
+        f"${row['net_per_hour_nzd']:,.2f}",
         f"${row['nzd_sales']:,.0f}",
-        f"${row['estimated_net_nzd']:,.0f}",
+        f"${row['aud_sales']:,.0f}",
+        f"${row['estimated_net_total_nzd']:,.0f}",
         f"{row['hours']:.1f}",
         row["calls"],
         row["customers"],
@@ -427,45 +423,11 @@ for index, row in enumerate(ranked_ptas, start=1):
 columns = [
     "Rank",
     "PTA",
-    "Net/hr",
+    "Net/hr NZD",
     "Sales NZD",
-    "Net NZD",
+    "Sales AUD",
+    "Est. Net NZD",
     "Hours",
     "Calls",
-    "Customers",
+    "Cust",
 ]
-
-fig, ax = plt.subplots(figsize=(14, 0.8 + len(table_rows) * 0.55))
-ax.axis("off")
-
-table = ax.table(
-    cellText=table_rows,
-    colLabels=columns,
-    loc="center",
-    cellLoc="center",
-)
-
-table.auto_set_font_size(False)
-table.set_fontsize(10)
-table.scale(1, 1.5)
-
-for (row, col), cell in table.get_celld().items():
-    if row == 0:
-        cell.set_text_props(weight="bold")
-    if col == 1:
-        cell.set_text_props(ha="left")
-
-plt.title("PLANIT PTA LEADERBOARD — MONTH TO DATE", fontsize=16, weight="bold", pad=20)
-
-image_path = "leaderboard.png"
-plt.savefig(image_path, bbox_inches="tight", dpi=200)
-plt.close()
-
-client.files_upload_v2(
-    channel=LEADERBOARD_CHANNEL_ID,
-    file=image_path,
-    title="Planit PTA Leaderboard",
-    initial_comment="🏆 Planit PTA Leaderboard — Month to Date",
-)
-
-print("Leaderboard image posted to Slack.")
