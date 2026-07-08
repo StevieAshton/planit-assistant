@@ -1,6 +1,7 @@
 import os
 import re
 import requests
+import matplotlib.pyplot as plt
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -371,55 +372,100 @@ ranked_ptas.sort(key=lambda x: x["net_nzd_per_hour"] + x["net_aud_per_hour"], re
 
 medals = ["🥇", "🥈", "🥉"]
 
-leaderboard_lines = []
-leaderboard_lines.append("*🏆 PLANIT PTA LEADERBOARD — MONTH TO DATE*")
-leaderboard_lines.append("_Ranked by estimated net revenue per hour_")
-leaderboard_lines.append("")
+ranked_ptas = []
+
+for pta in all_ptas:
+    if pta == "Unassigned":
+        continue
+
+    nzd_sales = sales[pta].get("NZD", 0)
+    aud_sales = sales[pta].get("AUD", 0)
+    hours = hours_summary.get(pta, 0)
+    calls = call_summary.get(pta, {}).get("calls", 0)
+    avg_call_seconds = call_summary.get(pta, {}).get("avg_call_seconds", 0)
+    customer_count = len(customers[pta])
+
+    estimated_net_nzd = nzd_sales * NET_MARGIN
+    estimated_net_aud = aud_sales * NET_MARGIN
+
+    net_nzd_per_hour = estimated_net_nzd / hours if hours else 0
+    net_aud_per_hour = estimated_net_aud / hours if hours else 0
+
+    ranked_ptas.append({
+        "pta": pta,
+        "nzd_sales": nzd_sales,
+        "aud_sales": aud_sales,
+        "estimated_net_nzd": estimated_net_nzd,
+        "estimated_net_aud": estimated_net_aud,
+        "hours": hours,
+        "calls": calls,
+        "avg_call_seconds": avg_call_seconds,
+        "customers": customer_count,
+        "net_nzd_per_hour": net_nzd_per_hour,
+        "net_aud_per_hour": net_aud_per_hour,
+    })
+
+ranked_ptas.sort(
+    key=lambda row: row["net_nzd_per_hour"] + row["net_aud_per_hour"],
+    reverse=True,
+)
+
+table_rows = []
 
 for index, row in enumerate(ranked_ptas, start=1):
-    medal = medals[index - 1] if index <= 3 else f"{index}."
+    table_rows.append([
+        index,
+        row["pta"],
+        f"${row['net_nzd_per_hour']:,.2f}",
+        f"${row['nzd_sales']:,.0f}",
+        f"${row['estimated_net_nzd']:,.0f}",
+        f"{row['hours']:.1f}",
+        row["calls"],
+        row["customers"],
+    ])
 
-    leaderboard_lines.append(
-        f"{medal} *{row['pta']}*\n"
-        f"• *Net/hr:* NZD ${row['net_nzd_per_hour']:,.2f} | AUD ${row['net_aud_per_hour']:,.2f}\n"
-        f"• *Sales:* NZD ${row['nzd_sales']:,.2f} | AUD ${row['aud_sales']:,.2f}\n"
-        f"• *Est. net:* NZD ${row['estimated_net_nzd']:,.2f} | AUD ${row['estimated_net_aud']:,.2f}\n"
-        f"• *Customers:* {row['customers']} | *Hours:* {row['hours']:.2f}\n"
-        f"• *Calls:* {row['calls']} | *Avg call:* {row['avg_call_seconds']:.1f}s"
-    )
+columns = [
+    "Rank",
+    "PTA",
+    "Net/hr",
+    "Sales NZD",
+    "Net NZD",
+    "Hours",
+    "Calls",
+    "Customers",
+]
 
-team_nzd_sales = sum(row["nzd_sales"] for row in ranked_ptas)
-team_aud_sales = sum(row["aud_sales"] for row in ranked_ptas)
-team_net_nzd = sum(row["estimated_net_nzd"] for row in ranked_ptas)
-team_net_aud = sum(row["estimated_net_aud"] for row in ranked_ptas)
-team_hours = sum(row["hours"] for row in ranked_ptas)
-team_calls = sum(row["calls"] for row in ranked_ptas)
-team_customers = sum(row["customers"] for row in ranked_ptas)
+fig, ax = plt.subplots(figsize=(14, 0.8 + len(table_rows) * 0.55))
+ax.axis("off")
 
-leaderboard_lines.append("")
-leaderboard_lines.append("*📊 Team totals*")
-leaderboard_lines.append(
-    f"• *Sales:* NZD ${team_nzd_sales:,.2f} | AUD ${team_aud_sales:,.2f}\n"
-    f"• *Est. net:* NZD ${team_net_nzd:,.2f} | AUD ${team_net_aud:,.2f}\n"
-    f"• *Customers:* {team_customers} | *Hours:* {team_hours:.2f}\n"
-    f"• *Calls:* {team_calls}"
+table = ax.table(
+    cellText=table_rows,
+    colLabels=columns,
+    loc="center",
+    cellLoc="center",
 )
 
-if "Unassigned" in all_ptas:
-    unassigned_nzd = sales["Unassigned"].get("NZD", 0)
-    unassigned_aud = sales["Unassigned"].get("AUD", 0)
+table.auto_set_font_size(False)
+table.set_fontsize(10)
+table.scale(1, 1.5)
 
-    if unassigned_nzd or unassigned_aud:
-        leaderboard_lines.append("")
-        leaderboard_lines.append(
-            f"_⚠️ Unassigned payments: NZD ${unassigned_nzd:,.2f} | AUD ${unassigned_aud:,.2f}_"
-        )
+for (row, col), cell in table.get_celld().items():
+    if row == 0:
+        cell.set_text_props(weight="bold")
+    if col == 1:
+        cell.set_text_props(ha="left")
 
-message = "\n\n".join(leaderboard_lines)
+plt.title("PLANIT PTA LEADERBOARD — MONTH TO DATE", fontsize=16, weight="bold", pad=20)
 
-client.chat_postMessage(
+image_path = "leaderboard.png"
+plt.savefig(image_path, bbox_inches="tight", dpi=200)
+plt.close()
+
+client.files_upload_v2(
     channel=LEADERBOARD_CHANNEL_ID,
-    text=message,
+    file=image_path,
+    title="Planit PTA Leaderboard",
+    initial_comment="🏆 Planit PTA Leaderboard — Month to Date",
 )
 
-print("Leaderboard posted to Slack.")
+print("Leaderboard image posted to Slack.")
