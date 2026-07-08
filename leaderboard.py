@@ -335,39 +335,85 @@ call_summary = fetch_hubspot_call_summary()
 
 all_ptas = sorted(set(list(sales.keys()) + list(hours_summary.keys()) + list(call_summary.keys())))
 
-leaderboard_lines = []
-
-leaderboard_lines.append("*🏆 PLANIT LEADERBOARD - MONTH TO DATE*")
-leaderboard_lines.append("")
+ranked_ptas = []
 
 for pta in all_ptas:
+    if pta == "Unassigned":
+        continue
+
     nzd_sales = sales[pta].get("NZD", 0)
     aud_sales = sales[pta].get("AUD", 0)
-
-    estimated_net_nzd = nzd_sales * NET_MARGIN
-    estimated_net_aud = aud_sales * NET_MARGIN
-
     hours = hours_summary.get(pta, 0)
     calls = call_summary.get(pta, {}).get("calls", 0)
     avg_call_seconds = call_summary.get(pta, {}).get("avg_call_seconds", 0)
     customer_count = len(customers[pta])
 
-    nzd_sales_per_hour = nzd_sales / hours if hours else 0
-    aud_sales_per_hour = aud_sales / hours if hours else 0
-
+    estimated_net_nzd = nzd_sales * NET_MARGIN
+    estimated_net_aud = aud_sales * NET_MARGIN
     net_nzd_per_hour = estimated_net_nzd / hours if hours else 0
     net_aud_per_hour = estimated_net_aud / hours if hours else 0
 
+    ranked_ptas.append({
+        "pta": pta,
+        "nzd_sales": nzd_sales,
+        "aud_sales": aud_sales,
+        "estimated_net_nzd": estimated_net_nzd,
+        "estimated_net_aud": estimated_net_aud,
+        "hours": hours,
+        "calls": calls,
+        "avg_call_seconds": avg_call_seconds,
+        "customers": customer_count,
+        "net_nzd_per_hour": net_nzd_per_hour,
+        "net_aud_per_hour": net_aud_per_hour,
+    })
+
+ranked_ptas.sort(key=lambda x: x["net_nzd_per_hour"] + x["net_aud_per_hour"], reverse=True)
+
+medals = ["🥇", "🥈", "🥉"]
+
+leaderboard_lines = []
+leaderboard_lines.append("*🏆 PLANIT PTA LEADERBOARD — MONTH TO DATE*")
+leaderboard_lines.append("_Ranked by estimated net revenue per hour_")
+leaderboard_lines.append("")
+
+for index, row in enumerate(ranked_ptas, start=1):
+    medal = medals[index - 1] if index <= 3 else f"{index}."
+
     leaderboard_lines.append(
-        f"*{pta}*\n"
-        f"• NZD ${nzd_sales:,.2f} | AUD ${aud_sales:,.2f}\n"
-        f"• Net NZD ${estimated_net_nzd:,.2f} | Net AUD ${estimated_net_aud:,.2f}\n"
-        f"• Customers: {customer_count}\n"
-        f"• Hours: {hours:.2f}\n"
-        f"• Calls: {calls} (Avg {avg_call_seconds:.1f}s)\n"
-        f"• NZD/hr ${nzd_sales_per_hour:,.2f} | AUD/hr ${aud_sales_per_hour:,.2f}\n"
-        f"• Net/hr NZD ${net_nzd_per_hour:,.2f} | AUD ${net_aud_per_hour:,.2f}"
+        f"{medal} *{row['pta']}*\n"
+        f"• *Net/hr:* NZD ${row['net_nzd_per_hour']:,.2f} | AUD ${row['net_aud_per_hour']:,.2f}\n"
+        f"• *Sales:* NZD ${row['nzd_sales']:,.2f} | AUD ${row['aud_sales']:,.2f}\n"
+        f"• *Est. net:* NZD ${row['estimated_net_nzd']:,.2f} | AUD ${row['estimated_net_aud']:,.2f}\n"
+        f"• *Customers:* {row['customers']} | *Hours:* {row['hours']:.2f}\n"
+        f"• *Calls:* {row['calls']} | *Avg call:* {row['avg_call_seconds']:.1f}s"
     )
+
+team_nzd_sales = sum(row["nzd_sales"] for row in ranked_ptas)
+team_aud_sales = sum(row["aud_sales"] for row in ranked_ptas)
+team_net_nzd = sum(row["estimated_net_nzd"] for row in ranked_ptas)
+team_net_aud = sum(row["estimated_net_aud"] for row in ranked_ptas)
+team_hours = sum(row["hours"] for row in ranked_ptas)
+team_calls = sum(row["calls"] for row in ranked_ptas)
+team_customers = sum(row["customers"] for row in ranked_ptas)
+
+leaderboard_lines.append("")
+leaderboard_lines.append("*📊 Team totals*")
+leaderboard_lines.append(
+    f"• *Sales:* NZD ${team_nzd_sales:,.2f} | AUD ${team_aud_sales:,.2f}\n"
+    f"• *Est. net:* NZD ${team_net_nzd:,.2f} | AUD ${team_net_aud:,.2f}\n"
+    f"• *Customers:* {team_customers} | *Hours:* {team_hours:.2f}\n"
+    f"• *Calls:* {team_calls}"
+)
+
+if "Unassigned" in all_ptas:
+    unassigned_nzd = sales["Unassigned"].get("NZD", 0)
+    unassigned_aud = sales["Unassigned"].get("AUD", 0)
+
+    if unassigned_nzd or unassigned_aud:
+        leaderboard_lines.append("")
+        leaderboard_lines.append(
+            f"_⚠️ Unassigned payments: NZD ${unassigned_nzd:,.2f} | AUD ${unassigned_aud:,.2f}_"
+        )
 
 message = "\n\n".join(leaderboard_lines)
 
