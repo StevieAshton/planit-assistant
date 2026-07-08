@@ -431,3 +431,79 @@ columns = [
     "Calls",
     "Cust",
 ]
+fig, ax = plt.subplots(figsize=(15, 1.4 + len(table_rows) * 0.6))
+fig.patch.set_facecolor("#F4EFE1")
+ax.set_facecolor("#F4EFE1")
+ax.axis("off")
+
+plt.title(
+    "PLANIT PTA LEADERBOARD — MONTH TO DATE",
+    fontsize=18,
+    weight="bold",
+    color="#0B4F42",
+    pad=24,
+)
+
+table = ax.table(
+    cellText=table_rows,
+    colLabels=columns,
+    loc="center",
+    cellLoc="center",
+)
+
+table.auto_set_font_size(False)
+table.set_fontsize(10)
+table.scale(1, 1.55)
+
+for (row, col), cell in table.get_celld().items():
+    cell.set_edgecolor("#E3DCCB")
+    cell.set_linewidth(0.8)
+
+    if row == 0:
+        cell.set_facecolor("#0B4F42")
+        cell.set_text_props(color="#F3FC7D", weight="bold")
+    else:
+        cell.set_facecolor("#F8F8F8")
+        cell.set_text_props(color="#231F20")
+
+    if row == 1:
+        cell.set_facecolor("#F3FC7D")
+        cell.set_text_props(color="#0B4F42", weight="bold")
+
+    if col == 1:
+        cell.set_text_props(ha="left")
+
+plt.figtext(
+    0.5,
+    0.03,
+    "Estimated net calculated at 11.5% of GMV. AUD converted to NZD at fixed rate.",
+    ha="center",
+    fontsize=9,
+    color="#0B4F42",
+)
+
+image_path = "leaderboard.png"
+plt.savefig(image_path, bbox_inches="tight", dpi=220, facecolor=fig.get_facecolor())
+plt.close()
+
+summary_message = "🏆 *Planit PTA Leaderboard — Month to Date*\n"
+summary_message += "_Ranked by estimated net/hr in NZD. Full table attached._\n\n"
+
+for index, row in enumerate(ranked_ptas[:3], start=1):
+    medal = ["🥇", "🥈", "🥉"][index - 1]
+    summary_message += (
+        f"{medal} *{row['pta']}* — "
+        f"Net/hr NZD ${row['net_per_hour_nzd']:,.2f} | "
+        f"NZD ${row['nzd_sales']:,.0f} | "
+        f"AUD ${row['aud_sales']:,.0f} | "
+        f"{row['calls']} calls\n"
+    )
+
+client.files_upload_v2(
+    channel=LEADERBOARD_CHANNEL_ID,
+    file=image_path,
+    title="Planit PTA Leaderboard",
+    initial_comment=summary_message,
+)
+
+print("Leaderboard image posted to Slack.")
